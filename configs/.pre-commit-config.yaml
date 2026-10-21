@@ -1,0 +1,199 @@
+# Профиль «Яндекс» · .pre-commit-config.yaml (фреймворк pre-commit, https://pre-commit.com).
+# Данные актуальны на 2026-10-09.
+#
+# СТАТУС. Фреймворк pre-commit есть у 1 из 25 измеренных репозиториев Яндекса (yandex-cloud/yandex-ai-studio-sdk);
+# JS/TS-проекты Gravity UI используют husky + nano-staged. Поэтому сам файл - «общепринятая альтернатива,
+# не Яндекс»; содержание проверок - по конфигам профиля (configs/python, configs/cpp, configs/web) и правилам
+# документов docs/**. Обязательной проверкой остаётся CI (Y-REPO-016, Y-BR-007): templates/github/workflows/lint.yml,
+# templates/gitlab/.gitlab-ci.yml. Хуки и CI вызывают одни и те же команды.
+#
+# Версии (теги репозиториев хуков проверены `git ls-remote --tags` 2026-10-09; идентификаторы хуков - по файлам
+# .pre-commit-hooks.yaml на этих тегах):
+#   pre-commit/pre-commit-hooks v6.0.0 · astral-sh/ruff-pre-commit v0.16.8 (ruff 0.16.8) ·
+#   pre-commit/mirrors-mypy v2.3.1 (mypy 2.3.1) · pre-commit/mirrors-clang-format v18.1.3 (clang-format 18.1.3) ·
+#   kynan/nbstripout 0.9.1 · pre-commit/pygrep-hooks v1.10.0 · gitleaks/gitleaks v8.30.1.
+#   Закомментированные варианты: alessandrojcm/commitlint-pre-commit-hook v9.27.0, Yelp/detect-secrets v1.5.0,
+#   mwouts/jupytext v1.19.6, codespell-project/codespell v2.4.3.
+# Проверено локально: YAML разобран (PyYAML 6.0.3); ruff 0.16.8 и clang-format 18.1.3 с конфигами профиля
+#   запускались напрямую (см. шапки configs/python/pyproject.toml и configs/cpp/.clang-format).
+# Не запускалось: сам фреймворк pre-commit - реестр пакетов недоступен из среды сборки.
+#
+# Установка в проекте:  pip install pre-commit && pre-commit install
+#   (default_install_hook_types ниже ставит и стадию commit-msg); разовый прогон: pre-commit run --all-files.
+# Конфиги профиля (pyproject.toml, .clang-format, .prettierrc.json, …) должны лежать в корне проекта.
+
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  # ---------------------------------------------------------------- общие проверки файлов (Y-PY-006, Y-REPO-012)
+  # Набор yandex-ai-studio-sdk (там rev v4.1.0): check-added-large-files --maxkb=10000, check-case-conflict,
+  # check-merge-conflict, check-symlinks, check-yaml, debug-statements, end-of-file-fixer, mixed-line-ending,
+  # trailing-whitespace. Добавлены нами: check-toml, --fix=lf, detect-private-key (не Яндекс).
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-symlinks
+      - id: check-yaml
+      - id: check-toml
+      - id: debug-statements           # Python: забытые breakpoint() / pdb
+      # Y-MLOPS-002, Y-NB-007: порог размера файла (10 МБ - как в yandex-ai-studio-sdk; умолчание хука - 500 КБ).
+      # Хук проверяет только добавляемые файлы; для прогона по всем файлам в CI добавьте --enforce-all.
+      - id: check-added-large-files
+        args: [--maxkb=10000]
+      - id: detect-private-key         # Y-MLOPS-005 (не Яндекс)
+
+  # ---------------------------------------------------------------- Python: ruff (configs/python/pyproject.toml)
+  # Y-PY-001 … 006, 009, 011, 013, 014, 025, 028, 029, 036 … 038, 047; ноутбуки .ipynb - Y-NB-012.
+  # Порядок важен: сначала линтер с --fix, затем форматтер. Оба хука вызывают ruff с --force-exclude,
+  # поэтому extend-exclude из pyproject.toml (Y-PY-008) действует и здесь.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.8
+    hooks:
+      - id: ruff-check                 # старый id `ruff` оставлен в репозитории хука как legacy alias
+        args: [--fix]
+      - id: ruff-format
+        types_or: [python, pyi, jupyter]   # умолчание хука включает ещё markdown - отсечено
+
+  # ---------------------------------------------------------------- Python: mypy (Y-PY-031, Y-PY-032)
+  # args: [] обязателен: по умолчанию хук передаёт --ignore-missing-imports --scripts-are-modules,
+  # что противоречит Y-PY-034 (отсутствие стабов глушится точечно в pyproject.toml).
+  # Хук работает в изолированном окружении: перечислите зависимости проекта и их стабы в additional_dependencies
+  # либо замените его локальным хуком (repo: local, language: system, entry: mypy, pass_filenames: false).
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.3.1
+    hooks:
+      - id: mypy
+        args: []
+        additional_dependencies: ["pytest==9.1.1"]
+        exclude: ^(build|dist)/
+
+  # ---------------------------------------------------------------- Python: pygrep (Y-PY-035, Y-ML-012; в SDK rev v1.9.0)
+  - repo: https://github.com/pre-commit/pygrep-hooks
+    rev: v1.10.0
+    hooks:
+      - id: python-check-blanket-type-ignore   # `# type: ignore` только с кодом ошибки
+      - id: python-check-blanket-noqa          # `# noqa` только с кодом правила
+      - id: python-no-log-warn                 # Y-PY-029: logger.warn устарел
+      # - id: python-no-eval                   # Y-PY-039 - по желанию
+
+  # ---------------------------------------------------------------- C++: clang-format (configs/cpp/.clang-format)
+  # Y-CPP-001 … 011, 017, 043. Версия закреплена на 18.1.3: конфиг проверен только на ней, а Яндекс
+  # форматирует сборкой на базе clang-format 18. По умолчанию хук берёт и json/java/javascript/proto - отсечено.
+  # clang-tidy в pre-commit не включён: ему нужна база команд компиляции - он идёт отдельной задачей CI.
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v18.1.3
+    hooks:
+      - id: clang-format
+        types_or: [c++]
+        exclude: ^(contrib|third_party|vendor)/
+
+  # ---------------------------------------------------------------- ноутбуки: nbstripout (Y-NB-006; не Яндекс)
+  # Рабочие ноутбуки коммитятся без выводов; каталог задаётся в files (Y-NB-005). Хук меняет рабочую копию:
+  # выводы исчезают и на диске. Для демонстрационных каталогов - вариант с --keep-output ниже.
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.9.1
+    hooks:
+      - id: nbstripout
+        files: ^notebooks/
+      # - id: nbstripout
+      #   alias: nbstripout-keep-output
+      #   name: nbstripout (metadata only)
+      #   args: [--keep-output]
+      #   files: ^(examples|tutorials)/
+
+  # ---------------------------------------------------------------- секреты: gitleaks (Y-MLOPS-005, Y-NB-008; не Яндекс)
+  # language: golang - pre-commit собирает бинарь сам (нужен Go). Без Go используйте id gitleaks-docker
+  # или gitleaks-system (бинарь установлен в системе). Альтернатива - Yelp/detect-secrets (ниже).
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # ---------------------------------------------------------------- web: ESLint, Stylelint, Prettier (configs/web/*)
+  # Перенос практики Gravity UI (husky + nano-staged: `eslint --fix --quiet`, `stylelint --fix --quiet`,
+  # `prettier --write`) на pre-commit - не Яндекс. ESLint и Stylelint требуют node_modules проекта
+  # (плагины приходят через пакеты @gravity-ui/*), поэтому это локальные хуки с language: system.
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint --fix (Y-TS-002 … 010, Y-REACT-001/005/008/009/011/012/013)
+        entry: npx eslint --fix --quiet
+        language: system
+        files: \.(js|jsx|mjs|cjs|ts|tsx|mts|cts)$
+        exclude: ^(build|dist|storybook-static)/
+      - id: stylelint
+        name: stylelint --fix (Y-CSS-006 … 008, 010, 011, 014)
+        entry: npx stylelint --fix --quiet
+        language: system
+        files: \.scss$
+      - id: prettier
+        name: prettier --write (md, json, yaml; .prettierrc.json автономный)
+        entry: npx prettier --write
+        language: system
+        files: \.(md|mdx|json|ya?ml)$
+        exclude: ^CHANGELOG\.md$        # его пишет release-please
+
+      # ------------------------------------------------------------ сообщение коммита (Y-GIT-001 … 006)
+      # Вариант A (по умолчанию для Python и C++): shell-скрипт профиля без Node.js. Файл скрипта - 
+      # configs/git/commit-msg (разбор - docs/git/commits.md, раздел «Shell-хук без Node.js»);
+      # скопируйте его в scripts/commit-msg проекта.
+      # Проверяет: английский язык, формат <type>(<scope>): <subject>, строчную букву, отсутствие точки, ≤ 72 символов.
+      - id: commit-msg-profile
+        name: commit message (Y-GIT-001 … 006)
+        entry: sh scripts/commit-msg
+        language: system
+        stages: [commit-msg]
+        pass_filenames: true
+
+  # Вариант B - commitlint, как в Gravity UI (.husky/commit-msg → npx commitlint -e). Нужны Node.js >= 22.12
+  # и commitlint.config.js из docs/git/commits.md в корне. Способ подключения через pre-commit - не Яндекс.
+  # - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+  #   rev: v9.27.0
+  #   hooks:
+  #     - id: commitlint
+  #       stages: [commit-msg]
+  #       additional_dependencies: ["@commitlint/config-conventional"]
+
+  # ---------------------------------------------------------------- по желанию (в профиль по умолчанию не входят)
+  # Секреты: Yelp/detect-secrets вместо gitleaks (Apache-2.0, не Яндекс). Нужен файл .secrets.baseline в git:
+  #   detect-secrets scan > .secrets.baseline
+  # - repo: https://github.com/Yelp/detect-secrets
+  #   rev: v1.5.0
+  #   hooks:
+  #     - id: detect-secrets
+  #       args: [--baseline, .secrets.baseline]
+  #
+  # Ноутбуки: парные .py-файлы вместо очистки выводов (Y-NB-011; не Яндекс). Нужен jupytext.toml:
+  #   formats = "ipynb,py:percent"
+  # На одном каталоге nbstripout и jupytext одновременно не нужны.
+  # - repo: https://github.com/mwouts/jupytext
+  #   rev: v1.19.6
+  #   hooks:
+  #     - id: jupytext
+  #       args: [--sync]
+  #       files: ^notebooks/
+  #
+  # Опечатки: codespell (используют yandex-ai-studio-sdk, ch-tools, YaFSDP).
+  # - repo: https://github.com/codespell-project/codespell
+  #   rev: v2.4.3
+  #   hooks:
+  #     - id: codespell
+  #
+  # Go (Y-GO-001 … 006): хук из репозитория golangci-lint (GPL-3.0; ydb-go-sdk хуки не использует).
+  # - repo: https://github.com/golangci/golangci-lint
+  #   rev: v2.13.1
+  #   hooks:
+  #     - id: golangci-lint
+  #
+  # Rust (Y-RS-001 … 003): cargo fmt и clippy - локальные хуки с language: system; опечатки - typos.
+  # - repo: https://github.com/crate-ci/typos
+  #   rev: v1.48.0
+  #   hooks:
+  #     - id: typos

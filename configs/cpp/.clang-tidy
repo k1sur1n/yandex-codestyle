@@ -1,0 +1,212 @@
+# Профиль Яндекса, C++ (аркадийный вариант): .clang-tidy
+#
+# РЕКОНСТРУКЦИЯ, НЕ ЯНДЕКС. Файл собран авторами профиля. Яндексу принадлежат только
+# части, помеченные [arcadia-default], [yql] и [yt-flow]; всё с пометкой [recon] и сам
+# состав файла - наша реконструкция по тексту гайда CPP_STYLE_GUIDE.md (CatBoost) и по коду.
+# Правила, которые проверяет файл: ../../docs/languages/cpp.md - Y-CPP-004, Y-CPP-013,
+# Y-CPP-020...024, Y-CPP-026...028, Y-CPP-032, Y-CPP-033, Y-CPP-040, Y-CPP-047, Y-CPP-056...058.
+#
+# Версия инструмента: clang-tidy 18.1.3 (Ubuntu LLVM 18.1.3). На других версиях не запускалось;
+# опция ConceptCase требует clang-tidy 17 или новее.
+# Проверено локально (2026-10-09):
+#   clang-tidy --verify-config --config-file=.clang-tidy  ->  "No config errors detected."
+#   Запуск с -std=c++20 на собственных тестовых файлах (не на коде Яндекса):
+#   - файл, написанный по профилю (TOptions, IRunner, TRunnerBase, EMode, NSample, CHasSize,
+#     TNames, value_type, size(), Swap(), MAX_ATTEMPTS, static constexpr MaxSize, поля Size_):
+#     0 предупреждений;
+#   - файлы с нарушениями: сработали readability-identifier-naming (namespace bad_ns; класс
+#     Runner2 и не абстрактный IConcrete; struct Options2; union Value2; enum Mode2 и значения
+#     FAST_MODE/safe; концепт HasSize2; алиас Names2; параметр шаблона key_type; публичное поле
+#     thread_count; приватные поля Size и count_; методы do_run, make_one, helper_method;
+#     функция free_function; параметры Verbose/Arg; локальная Local_Value; статическая
+#     локальная callCount; глобальная константа MaxAttempts; глобальная переменная GlobalBad;
+#     макрос sample_ensure), modernize-use-nullptr (NULL), modernize-use-override
+#     (virtual без override), modernize-use-using (typedef), readability-isolate-declaration,
+#     readability-braces-around-statements, bugprone-argument-comment (голый true при двух
+#     аргументах), bugprone-use-after-move, performance-implicit-conversion-in-loop,
+#     google-global-names-in-headers (using namespace в заголовке, с -header-filter).
+#
+# Источники (все - Apache-2.0):
+#   [arcadia-default] build/config/tests/clang_tidy/config.yaml - дефолтный конфиг Аркадии,
+#     ревьюеры правок - cppcommittee, последняя правка 2026-05-22:
+#     https://github.com/yandex/yatool/blob/daa9a3c774de905c447227eb7547cfb2e9418746/build/config/tests/clang_tidy/config.yaml
+#   [yql] yql/essentials/.clang-tidy, последняя правка 2026-10-05 (в оригинале сама проверка
+#     readability-identifier-naming выключена, опции префиксов только записаны):
+#     https://github.com/ydb-platform/ydb/blob/d9692f89c1dd1605ed8c751416d37740ec8e6bbe/yql/essentials/.clang-tidy
+#   [yt-flow] yt/yt/flow/.clang-tidy (в оригинале YQL эта проверка выключена):
+#     https://github.com/ytsaurus/ytsaurus/blob/6456ed3d4de2144a605e71d223beb7a9942bb8b9/yt/yt/flow/.clang-tidy
+#
+# Чем файл отличается от дефолта Аркадии:
+#   1. Убраны проверки arcadia-typeid-name-restriction и arcadia-ascii-compare-ignorecase:
+#      это собственные проверки Яндекса, в стоковом clang-tidy их нет
+#      (--verify-config на оригинале: "unknown check").
+#   2. Убрана опция misc-header-include-cycle.IgnoredFilesList: "contrib/.*" - сама проверка
+#      не включена ни в оригинале, ни здесь.
+#   3. Добавлены проверки из [yql] и [yt-flow] и опции [recon]; два регулярных выражения
+#      дополнены (помечено "расширено").
+#
+# Известные ограничения:
+#   - префикс I разрешён любому абстрактному классу; условие гайда "у интерфейса нет полей"
+#     инструмент не проверяет (Y-CPP-021);
+#   - значения нескоупных enum, статические поля и константы-члены классов не проверяются
+#     (Y-CPP-022, Y-CPP-026, Y-CPP-028);
+#   - шаблон переменной уровня namespace (template <class T> constexpr bool ...) считается
+#     глобальной константой и должен быть в UPPER_CASE;
+#   - предварительные объявления без определения в единице трансляции не проверяются;
+#   - имена, собранные макросом (например, классы тестов GoogleTest), не проверяются;
+#   - bugprone-argument-comment сверяет имя только в форме /*name=*/; принятая в гайдах
+#     Яндекса форма /*name*/ принимается без сверки имени (Y-CPP-047);
+#   - google-global-names-in-headers строже гайда: срабатывает и на разрешённые гайдом
+#     "using namespace std::literals", и на "using std::string;" в глобальной области
+#     заголовка (Y-CPP-040); подавляется комментарием // NOLINT(google-global-names-in-headers);
+#   - предупреждения в заголовках видны только с -header-filter (см. ниже).
+#
+# Чтобы проверялись и заголовки проекта, задайте фильтр под свои каталоги, например:
+# HeaderFilterRegex: '^.*/(src|include)/.*$'
+Checks: >
+  -*,
+  bugprone-use-after-move,
+  performance-implicit-conversion-in-loop,
+  readability-identifier-naming,
+  bugprone-argument-comment,
+  google-global-names-in-headers,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-using,
+  readability-braces-around-statements,
+  readability-isolate-declaration
+# Происхождение проверок:
+#   [arcadia-default] bugprone-use-after-move, performance-implicit-conversion-in-loop,
+#                     readability-identifier-naming
+#   [yql]             bugprone-argument-comment, modernize-use-nullptr, modernize-use-override,
+#                     modernize-use-using, readability-braces-around-statements,
+#                     readability-isolate-declaration
+#   [yt-flow]         google-global-names-in-headers
+CheckOptions:
+  # [arcadia-default] --- дословно из build/config/tests/clang_tidy/config.yaml
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.ClassIgnoredRegexp
+    value: "promise_type"
+  - key: readability-identifier-naming.PublicMemberCase
+    value: CamelCase
+  - key: readability-identifier-naming.ProtectedMemberCase
+    value: CamelCase
+  - key: readability-identifier-naming.ProtectedMemberSuffix
+    value: _
+  - key: readability-identifier-naming.PrivateMemberCase
+    value: CamelCase
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: _
+  - key: readability-identifier-naming.FunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.ClassMethodCase
+    value: CamelCase
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.MacroDefinitionIgnoredRegexp
+    value: "^_.*"
+  # [arcadia-default, расширено] в оригинале "make_error_code";
+  # swap добавлен по исключению гайда для имён, которых ждёт внешний код (Y-CPP-032)
+  - key: readability-identifier-naming.FunctionIgnoredRegexp
+    value: "(make_error_code|swap)"
+  # [arcadia-default, расширено] в оригинале "(begin|end|empty|size|ysize|front|back|Save|Load)";
+  # data и swap добавлены по тому же исключению гайда (Y-CPP-032).
+  # clang-tidy 18 сопоставляет IgnoredRegexp с именем целиком: push_back или resize сюда не попадают.
+  - key: readability-identifier-naming.PublicMethodIgnoredRegexp
+    value: "(begin|end|empty|size|ysize|front|back|Save|Load|data|swap)"
+
+  # [yql] --- дословно из yql/essentials/.clang-tidy
+  - key: readability-identifier-naming.StructPrefix
+    value: T
+  - key: readability-identifier-naming.EnumPrefix
+    value: E
+  - key: readability-identifier-naming.NamespacePrefix
+    value: N
+  # Статические локальные переменные - с заглавной буквы. Так в конфиге YQL и в гайде YT;
+  # аркадийный гайд их отдельно не оговаривает. Если команда читает гайд буквально
+  # ("локальные - с маленькой"), удалите эту опцию: сработает LocalVariableCase.
+  - key: readability-identifier-naming.StaticVariableCase
+    value: CamelCase
+  # Комментарии к аргументам (Y-CPP-047): bool-литерал без комментария в вызове с двумя
+  # и более аргументами даёт предупреждение. Автоисправление вставляет /*name=*/
+  # (со знаком "="); в гайдах Яндекса принята форма /*name*/ - правьте вручную.
+  - key: bugprone-argument-comment.IgnoreSingleArgument
+    value: true
+  - key: bugprone-argument-comment.CommentBoolLiterals
+    value: true
+
+  # [recon] --- реконструкция, не Яндекс: типы (Y-CPP-020, Y-CPP-021, Y-CPP-022)
+  - key: readability-identifier-naming.ClassPrefix
+    value: T
+  # Абстрактный класс: TFooBase либо интерфейс IFoo. Не абстрактному классу префикс I запрещён.
+  - key: readability-identifier-naming.AbstractClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.AbstractClassPrefix
+    value: T
+  - key: readability-identifier-naming.AbstractClassIgnoredRegexp
+    value: "^I[A-Z][A-Za-z0-9]*$"
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructIgnoredRegexp
+    value: "promise_type"
+  - key: readability-identifier-naming.UnionCase
+    value: CamelCase
+  - key: readability-identifier-naming.UnionPrefix
+    value: T
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.ScopedEnumConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypeAliasCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypeAliasPrefix
+    value: T
+  # Алиасы, которых ждёт стандартная библиотека (value_type, iterator, ...), - исключение Y-CPP-032
+  - key: readability-identifier-naming.TypeAliasIgnoredRegexp
+    value: "^[a-z][a-z0-9_]*$"
+  - key: readability-identifier-naming.TypedefCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypedefPrefix
+    value: T
+  - key: readability-identifier-naming.TypedefIgnoredRegexp
+    value: "^[a-z][a-z0-9_]*$"
+  # Правила об именах шаблонных параметров в гайде нет; в коде встречаются T, D, TKey
+  - key: readability-identifier-naming.TypeTemplateParameterCase
+    value: CamelCase
+  # Префикс C выведен из кода util и YT, в гайдах его нет (Y-CPP-033)
+  - key: readability-identifier-naming.ConceptCase
+    value: CamelCase
+  - key: readability-identifier-naming.ConceptPrefix
+    value: C
+
+  # [recon] --- пространства имён (Y-CPP-023)
+  - key: readability-identifier-naming.NamespaceCase
+    value: CamelCase
+
+  # [recon] --- методы (Y-CPP-024): дефолт Аркадии задаёт только FunctionCase и ClassMethodCase,
+  # поэтому регистр публичных нестатических методов в нём не проверяется
+  - key: readability-identifier-naming.PublicMethodCase
+    value: CamelCase
+  - key: readability-identifier-naming.MethodCase
+    value: CamelCase
+
+  # [recon] --- переменные и параметры (Y-CPP-027)
+  - key: readability-identifier-naming.LocalVariableCase
+    value: camelBack
+  - key: readability-identifier-naming.ParameterCase
+    value: camelBack
+  - key: readability-identifier-naming.GlobalVariableCase
+    value: camelBack
+
+  # [recon] --- константы уровня namespace (Y-CPP-028). Спорный пункт: YDB и YT пишут их
+  # в PascalCase; если команда выбирает этот вариант, замените значение на CamelCase.
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: UPPER_CASE
+  # Две опции ниже нужны только затем, чтобы GlobalConstantCase и GlobalVariableCase не
+  # применялись к статическим членам классов (clang-tidy считает их "файловыми" переменными).
+  # Сами статические члены не проверяются: по гайду они пишутся как прочие поля (Y-CPP-026).
+  - key: readability-identifier-naming.ClassConstantCase
+    value: aNy_CasE
+  - key: readability-identifier-naming.ClassMemberCase
+    value: aNy_CasE

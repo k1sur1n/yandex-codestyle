@@ -1,0 +1,66 @@
+# Шаблон формы «сообщение об ошибке» - профиль Яндекса (реконструкция, см. docs/git/repository.md: Y-REPO-015).
+# Поля собраны по формам gravity-ui/uikit (1-bug-report.yml) и diplodoc-platform/cli (1-bug-report.yml).
+# Формат: GitHub issue forms (YAML); проверено разбором YAML локально, на GitHub не загружалось.
+# Метка из `labels` применяется, только если она уже создана в репозитории.
+name: Bug report
+description: Report a problem with <PROJECT>
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for taking the time to fill out this bug report!
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+      placeholder: I am doing ... What I expect is ... What actually happens is ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Version, tag or commit of <PROJECT> where the bug occurs.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: A minimal code snippet, a command or a link to a repository that reproduces the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: If possible, add the error message, a log or a screenshot.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, CPU architecture, runtime or compiler version, browser if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional information
+      description: Anything else we should know, including whether you intend to submit a pull request.
+  - type: checkboxes
+    id: validations
+    attributes:
+      label: Validations
+      description: Before submitting the issue, please make sure of the following.
+      options:
+        - label: I have checked that there is no existing issue that reports the same bug.
+          required: true

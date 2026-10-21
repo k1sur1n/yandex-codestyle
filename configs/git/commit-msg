@@ -1,0 +1,45 @@
+#!/bin/sh
+# commit-msg - проверка сообщения коммита по профилю Яндекса (Y-GIT-001…006).
+# Образец: .husky/commit-msg в diplodoc-platform/cli (MIT); список типов - из @commitlint/config-conventional.
+# Нужны только POSIX sh, sed, grep, head. Проверено локально: dash 0.5.12 и bash 5.2, GNU grep 3.11.
+set -eu
+
+msg_file="$1"
+# Убрать комментарии git и всё, что ниже линии «ножниц» (git commit --verbose).
+msg=$(sed -e '/^# -\{24\} >8 -\{24\}$/,$d' -e '/^#/d' "$msg_file")
+subject=$(printf '%s\n' "$msg" | head -n 1)
+
+fail() {
+    printf 'commit-msg: %s\n  заголовок: %s\n' "$1" "$subject" >&2
+    exit 1
+}
+
+# Служебные сообщения git: autosquash и локальные слияния (в основную ветку они не попадают).
+case "$subject" in
+    'fixup! '*|'squash! '*|'amend! '*|'Merge '*) exit 0 ;;
+esac
+
+# Y-GIT-001: только английский. Байты 0xD0-0xD3 - первые байты UTF-8 для U+0400-U+04FF (кириллица).
+cyrillic=$(printf '[\320-\323]')
+if printf '%s\n' "$msg" | LC_ALL=C grep -q "$cyrillic"; then
+    fail 'в сообщении есть кириллица - пишите по-английски (Y-GIT-001)'
+fi
+
+# Y-GIT-002, Y-GIT-003: <type>(<scope>)!: <описание>
+types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
+if ! printf '%s\n' "$subject" | grep -Eq "^($types)(\([^()[:space:]]+\))?!?: [^[:space:]]"; then
+    fail "ожидается '<type>(<scope>): <описание>', типы: $types (Y-GIT-002, Y-GIT-003)"
+fi
+
+# Y-GIT-005: описание со строчной буквы, без точки в конце.
+if printf '%s\n' "$subject" | grep -Eq '^[a-z]+(\([^)]*\))?!?: [A-Z]'; then
+    fail 'описание начинается со строчной буквы (Y-GIT-005)'
+fi
+case "$subject" in
+    *.) fail 'точка в конце заголовка не ставится (Y-GIT-005)' ;;
+esac
+
+# Y-GIT-006: не длиннее 72 символов (кириллица уже отсеяна, поэтому байты = символы для ASCII).
+if [ "${#subject}" -gt 72 ]; then
+    fail "заголовок длиннее 72 символов: ${#subject} (Y-GIT-006)"
+fi

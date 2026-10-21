@@ -1,0 +1,187 @@
+# Профиль «Яндекс» · GitHub Actions: линтеры и форматтеры в режиме проверки.
+# Скопируйте в .github/workflows/lint.yml; конфиги профиля (pyproject.toml, .clang-format, .clang-tidy,
+# eslint.config.js, .prettierrc.json, .stylelintrc.json) должны лежать в корне проекта.
+# Данные актуальны на 2026-10-09. Правила: docs/enforcement.md (матрица «правило → инструмент»).
+#
+# ИСТОЧНИК ПРАКТИКИ - реконструкция по 25 открытым репозиториям Яндекса (research/yandex.md): workflow GitHub
+# Actions есть у 22 из 25, явный шаг линтера - у 14; каркас по образцу gravity-ui/uikit (ci.yml: checkout →
+# setup-node 20 → npm ci → npm run lint → npm run typecheck; pr-title.yml с concurrency) и yandex/ch-tools
+# (job lint, затем tests с матрицей Python 3.10-3.14). Линтеры в CI вызывают те же команды, что и локальные хуки
+# (configs/.pre-commit-config.yaml). Тесты (pytest с матрицей 3.10-3.14, ctest, npm test) - в отдельном workflow.
+# Задания clang-format и clang-tidy в публичных CI ydb, catboost, ytsaurus и userver отсутствуют - это перенос
+# `ya style` и `ya test -t -DTIDY` на GitHub Actions (не Яндекс).
+#
+# Версии: actions/checkout@v4, actions/setup-python@v5, actions/setup-node@v4 - теги проверены
+#   `git ls-remote --tags` 2026-10-09 (так же закреплены в репозиториях выборки; новейшие мажоры на эту дату - 
+#   checkout v7, setup-python v7, setup-node v7). Инструменты: ruff 0.16.8, mypy 2.3.1, clang-format 18.1.3 (PyPI),
+#   clang-tidy 18 (apt, Ubuntu 24.04), Node.js 20, nbstripout 0.9.1, gitleaks 8.30.1 (релиз GitHub, sha256 ниже).
+# Проверено локально: YAML разобран (PyYAML 6.0.3); команды ruff, clang-format, clang-tidy, gitleaks и shell-проверки
+#   запускались в среде сборки. Не запускалось: сам workflow (исполняется только на GitHub); npm-пакеты
+#   недоступны из среды сборки.
+#
+# Задания пропускаются сами, если в репозитории нет соответствующего стека (hashFiles). Имена заданий стабильны:
+# их назначают обязательными проверками защищённой ветки (Y-BR-007, Y-REPO-016, Y-REPO-017).
+
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, edited]   # edited - чтобы перепроверять изменённый заголовок PR
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------------------------------------ Python: ruff + mypy (configs/python/pyproject.toml)
+  # Y-PY-001 … 006, 008, 009, 011, 013, 014, 025, 027 … 029, 031, 032, 035 … 038, 046, 047; ноутбуки - Y-NB-012.
+  # Линтер и mypy запускаются на нижней поддерживаемой версии (3.10, Y-PY-046), как style-окружение ydb-python-sdk.
+  python:
+    name: python (ruff, mypy)
+    if: ${{ hashFiles('pyproject.toml') != '' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - name: Install tools
+        run: python -m pip install "ruff==0.16.8" "mypy==2.3.1" "pytest==9.1.1"
+      - name: Install project            # mypy должен видеть зависимости проекта (Y-PY-034)
+        run: python -m pip install -e .
+      - name: ruff format --check         # Y-PY-001 … 005
+        run: ruff format --check .
+      - name: ruff check                  # аннотации в PR: --output-format=github
+        run: ruff check --output-format=github .
+      - name: mypy                        # Y-PY-031, Y-PY-032
+        run: mypy src tests
+      - name: Import check                # Y-PY-016 - аналог import_test Аркадии; подставьте имя пакета
+        run: python -c "import <PROJECT>"
+
+  # ------------------------------------------------------------------ C++: clang-format (configs/cpp/.clang-format)
+  # Y-CPP-001 … 011, 017, 043; `#pragma once` - Y-CPP-035 (скрипт авторов профиля, не Яндекс).
+  # Версия закреплена на 18.1.3 через PyPI: конфиг проверен на ней, Яндекс форматирует сборкой clang-format 18.
+  cpp-format:
+    name: cpp (clang-format)
+    if: ${{ hashFiles('**/*.cpp', '**/*.h') != '' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install clang-format 18.1.3
+        run: python -m pip install "clang-format==18.1.3"
+      - name: clang-format --dry-run --Werror
+        run: |
+          git ls-files -z '*.h' '*.cpp' ':!contrib/**' ':!third_party/**' ':!vendor/**' \
+            | xargs -0 -r clang-format --dry-run --Werror --style=file
+      - name: Header guard is '#pragma once' (Y-CPP-035)
+        run: |
+          git ls-files -z '*.h' ':!contrib/**' ':!third_party/**' ':!vendor/**' \
+            | xargs -0 -r awk 'FNR==1 && $0 != "#pragma once" {print FILENAME ": первая строка не #pragma once"; bad=1} END {exit bad}'
+
+  # ------------------------------------------------------------------ C++: clang-tidy (configs/cpp/.clang-tidy)
+  # Y-CPP-004, 013, 020 … 024, 026 … 028, 032, 033, 040, 047, 056 … 058; стандарт C++20 - Y-CPP-067.
+  # Нужна база команд компиляции, то есть настроенная сборка CMake со всеми зависимостями. Задание включается
+  # переменной репозитория ENABLE_CLANG_TIDY=true (Settings → Secrets and variables → Actions → Variables)
+  # после того, как проект собирается в CI. -header-filter подгоните под свои каталоги.
+  cpp-tidy:
+    name: cpp (clang-tidy)
+    if: ${{ vars.ENABLE_CLANG_TIDY == 'true' && hashFiles('CMakeLists.txt') != '' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-tidy 18, cmake, ninja
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy-18 clang-tools-18 cmake ninja-build
+      - name: Configure (compile_commands.json, C++20)
+        run: cmake -S . -B build -G Ninja -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - name: run-clang-tidy
+        run: run-clang-tidy-18 -p build -quiet -warnings-as-errors='*' -header-filter='.*/(src|include)/.*' 'src/.*'
+
+  # ------------------------------------------------------------------ web: ESLint, Stylelint, Prettier, tsc (configs/web/*)
+  # Y-TS-001 … 010, Y-REACT-001/005/008/009/011/012/013, Y-CSS-006 … 008/010/011/014. Как в gravity-ui/uikit:
+  # npm run lint (eslint, stylelint, prettier --check) и npm run typecheck (tsc --noEmit); --max-warnings=0 - как
+  # в page-constructor, иначе предупреждения общего конфига не блокируют слияние. Node.js 20 - как в CI uikit.
+  web:
+    name: web (eslint, stylelint, prettier, tsc)
+    if: ${{ hashFiles('package.json') != '' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: eslint
+        run: npx eslint . --max-warnings=0
+      - name: stylelint
+        run: npx stylelint "src/**/*.scss" --allow-empty-input
+      - name: prettier --check
+        run: npx prettier --check "**/*.{md,json,yaml,yml}"
+      - name: tsc --noEmit
+        run: npx tsc --noEmit
+
+  # ------------------------------------------------------------------ заголовок PR (Y-GIT-001 … 006, Y-BR-006)
+  # При squash-слиянии в историю попадает заголовок PR - проверяется он. Заголовок передаётся через env, а не
+  # подставляется в run (отличие от pr-title.yml uikit - не Яндекс). Скрипт scripts/commit-msg - копия файла
+  # configs/git/commit-msg профиля (разбор - docs/git/commits.md, раздел «Shell-хук без Node.js»).
+  # Вариант с commitlint - в том же документе.
+  pr-title:
+    name: PR Title
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$PR_TITLE" > title.txt
+          sh scripts/commit-msg title.txt
+
+  # ------------------------------------------------------------------ ноутбуки без выводов (Y-NB-006; nbstripout - не Яндекс)
+  # Рабочие ноутбуки лежат в notebooks/ (Y-NB-005). --verify завершается с ошибкой, если файл был бы изменён.
+  notebooks:
+    name: notebooks (nbstripout --verify)
+    if: ${{ hashFiles('notebooks/**/*.ipynb') != '' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install "nbstripout==0.9.1"
+      - name: nbstripout --verify
+        run: git ls-files -z 'notebooks/**/*.ipynb' | xargs -0 -r nbstripout --verify
+
+  # ------------------------------------------------------------------ секреты и большие файлы (Y-MLOPS-005, Y-MLOPS-002, Y-NB-008)
+  # gitleaks - не Яндекс; бинарь берётся из релиза на GitHub (gitleaks/gitleaks-action для организаций требует
+  # лицензию, поэтому не используется). Сканируется вся история: нужен fetch-depth: 0.
+  secrets:
+    name: secrets (gitleaks), large files
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks 8.30.1
+        env:
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          curl -sSL -o gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "$GITLEAKS_SHA256  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks && sudo mv gitleaks /usr/local/bin/
+      - name: gitleaks git (вся история)
+        run: gitleaks git --redact --verbose .
+      - name: Files larger than 10 MB (порог yandex-ai-studio-sdk)
+        run: |
+          git ls-files -z | xargs -0 -r stat -c '%s %n' \
+            | awk '$1 > 10485760 {print "слишком большой файл: " $2 " (" $1 " байт)"; bad=1} END {exit bad}'

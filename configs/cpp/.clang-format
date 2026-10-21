@@ -1,0 +1,152 @@
+# Профиль Яндекса, C++ (аркадийный вариант): .clang-format
+#
+# Ниже строки-разделителя - дословная копия дефолтного .clang-format Аркадии:
+#   build/config/tests/cpp_style/.clang-format (владелец - группа cppcommittee),
+#   https://github.com/yandex/yatool/blob/daa9a3c774de905c447227eb7547cfb2e9418746/build/config/tests/cpp_style/.clang-format
+#   Лицензия Apache-2.0. Последняя правка оригинала - 2025-10-30. Тот же файл байт в байт
+#   лежит в catboost, ydb и ytsaurus (md5 тела: c774b57af843ec2725d9659b9820cfe7).
+# Правила, которым соответствует файл: ../../docs/languages/cpp.md (раздел "Форматирование").
+#
+# Версия инструмента: clang-format >= 16 (структурная форма AlignTrailingComments появилась
+#   в 16; InsertBraces - в 15; PackConstructorInitializers - в 14).
+# Проверено локально (2026-10-09) на clang-format 18.1.3 (Ubuntu):
+#   clang-format --style=file:.clang-format --dump-config   -> код возврата 0;
+#   тестовый файл отформатирован, повторный прогон изменений не даёт
+#   (clang-format --dry-run --Werror -> код возврата 0).
+#   На версиях 16, 17 и 19+ не запускалось.
+#
+# BasedOnStyle не задан: всё, что не указано, берётся из стиля LLVM.
+#
+# Чем результат отличается от кода Яндекса. В Аркадии форматирует собственная сборка
+# (ya style -> ynd-clang-format-18). Стоковый clang-format с этим же файлом:
+#   - прижимает "{" к последнему элементу списка инициализации конструктора
+#     (", Name_(name) {"), а гайд и код util ставят "{" на отдельную строку;
+#   - прижимает "{" после многострочного условия if/for, а гайд требует отдельную строку.
+#   Профиль принимает вывод стокового форматтера (см. Y-CPP-002 и Y-CPP-005).
+#
+# Вариант B (реконструкция, не Яндекс; проверен на 18.1.3): чтобы "{" после списка
+# инициализации стояла на своей строке, поменяйте три значения и добавьте четвёртое - тогда
+# на новую строку переедет скобка у всех функций и методов:
+#   BreakBeforeBraces: Custom
+#   BraceWrapping: AfterFunction: true, IndentBraces: false, SplitEmptyFunction: true
+#
+# Опции, о которых полезно знать:
+#   ColumnLimit: 0      - длина строки не ограничена; переносы строк остаются авторскими;
+#   SortIncludes: false - порядок #include форматтер не трогает (см. Y-CPP-039);
+#   NamespaceIndentation: All - тело namespace с отступом (спорный пункт, см. Y-CPP-010);
+#   макросы Y_* в списках ниже относятся к библиотеке util; в проекте без util они не мешают.
+#
+# ---------------- дословная копия оригинала ----------------
+Language:        Cpp
+AccessModifierOffset: -4
+ConstructorInitializerIndentWidth: 4
+AlignEscapedNewlinesLeft: false
+AlignEscapedNewlines: Left
+AlignTrailingComments:
+    Kind: Always
+    OverEmptyLines: 0
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortBlocksOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AlwaysBreakTemplateDeclarations: true
+AlwaysBreakBeforeMultilineStrings: false
+BreakBeforeBinaryOperators: false
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeComma
+BinPackParameters: true
+ColumnLimit:     0
+DerivePointerAlignment: false
+ExperimentalAutoDetectBinPacking: false
+IndentCaseLabels: true
+IndentWrappedFunctionNames: false
+IndentFunctionDeclarationAfterType: false
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+NamespaceIndentation: All
+FixNamespaceComments: true
+ShortNamespaceLines: 0
+ObjCSpaceAfterProperty: false
+ObjCSpaceBeforeProtocolList: true
+PackConstructorInitializers: Never
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakComment: 300
+PenaltyBreakString: 1000
+PenaltyBreakFirstLessLess: 120
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 60
+PointerAlignment: Left
+SpacesBeforeTrailingComments: 1
+SpacesInSquareBrackets: false
+Cpp11BracedListStyle: true
+Standard:        c++20
+IndentWidth:     4
+TabWidth:        4
+UseTab:          Never
+BreakBeforeBraces: Attach
+InsertBraces: true
+
+# NB: BraceWrapping has no effect unless BreakBeforeBraces is set to Custom
+BraceWrapping:
+    AfterClass: false
+    AfterControlStatement: false
+    AfterEnum: false
+    AfterFunction: false
+    AfterNamespace: false
+    AfterObjCDeclaration: false
+    AfterStruct: false
+    AfterUnion: false
+    BeforeCatch: false
+    BeforeElse: false
+    IndentBraces: true
+
+SpacesInParentheses: false
+SpacesInAngles:  false
+SpaceInEmptyParentheses: false
+SpacesInCStyleCastParentheses: false
+SpacesInContainerLiterals: true
+SpaceBeforeAssignmentOperators: true
+ContinuationIndentWidth: 4
+CommentPragmas:  '^ IWYU pragma:'
+ForEachMacros: [
+    foreach,
+    Q_FOREACH,
+    BOOST_FOREACH,
+    # Is not a foreach, but correct formatting is achieved
+    Y_DEFER
+]
+IfMacros: [
+    with_lock  # Is not an if, but correct formatting is achieved
+]
+SpaceBeforeParens: ControlStatements
+DisableFormat:   false
+SortIncludes: false
+IndentPPDirectives: BeforeHash
+
+SpaceBeforeInheritanceColon: false
+NamespaceMacros: [
+    Y_UNIT_TEST_SUITE
+]
+AttributeMacros: [
+    Y_FORCE_INLINE,
+    Y_HIDDEN,
+    Y_NO_INLINE,
+    Y_NO_SANITIZE,
+    Y_PRINTF_FORMAT,
+    Y_PUBLIC,
+    Y_PURE_FUNCTION,
+    Y_WARN_UNUSED_RESULT,
+]
+IndentExternBlock: Indent
+TypenameMacros: [
+    BENCHMARK_F,
+    Y_POD_STATIC_THREAD,
+    Y_POD_THREAD,
+    Y_STATIC_THREAD,
+    Y_THREAD,
+]
+StatementAttributeLikeMacros: [ythrow]
+SpacesInLineCommentPrefix:
+    Minimum: 1
+    Maximum: 1

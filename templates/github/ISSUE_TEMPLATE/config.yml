@@ -1,0 +1,9 @@
+# Настройка выбора шаблона issue - профиль Яндекса (реконструкция, см. docs/git/repository.md: Y-REPO-015).
+# По образцу gravity-ui/uikit: пустые issue отключены, вопросы направлены в чат сообщества.
+# В выборке пустые issue отключены у 2 из 6 репозиториев с шаблонами (uikit, userver);
+# у Diplodoc стоит `blank_issues_enabled: true` - выберите значение под свой проект.
+blank_issues_enabled: false
+contact_links:
+  - name: Community chat
+    url: <CHAT_URL>
+    about: Ask questions and discuss <PROJECT> with other users.

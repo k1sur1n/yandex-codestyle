@@ -1,0 +1,191 @@
+# =============================================================================
+# Профиль «Яндекс / Python» - фрагмент pyproject.toml: секции [tool.ruff], [tool.mypy], [tool.pytest].
+# Данные актуальны на 2026-10-09. Правила: ../../docs/languages/python.md (Y-PY-001 … Y-PY-047).
+# Скопируйте секции [tool.*] в pyproject.toml проекта. Секции [project] здесь нет намеренно:
+# в своём [project] укажите requires-python = ">=3.10" (Y-PY-046).
+#
+# ЭТО РЕКОНСТРУКЦИЯ. Единого публичного Python-гайда Яндекса нет. Файл собран из трёх слоёв:
+#   1) ядро - дефолтные конфиги Аркадии из yandex/yatool (Apache-2.0), коммит daa9a3c7 от 2026-10-09:
+#        build/config/tests/ruff/ruff.toml            line-length = 120; select = E4, E7, E9, F, W
+#                                                      (ревьюер файла - Python Committee, см. ruff/a.yaml)
+#        build/config/tests/py_style/pyproject.toml   black: line-length = 120, skip-string-normalization
+#   2) расширение - опции из конфигов открытых Python-репозиториев Яндекса (выборка из 17 репозиториев;
+#      происхождение каждой опции - в комментарии рядом с ней);
+#   3) YTsaurus Python Style Guide (yt/styleguide/python.md, 2025-07-30) - двойные кавычки.
+# Чем файл отличается от буквального дефолта Аркадии и как получить точную копию - блок «Вариант B» внизу.
+#
+# Версии инструментов (пакеты PyPI):
+#   ruff   0.16.8 - этой версией файл проверен; в репозиториях Яндекса: ==0.15.13 (datalens-backend),
+#                     >=0.11.0 (ydb-mcp), ^0.11.2 (langchain-ydb), >=0.9.9,<0.10.0 (django-ydb-backend)
+#   mypy   2.3.1 - проверено; в репозиториях Яндекса: ==2.1.0 (datalens-backend), >=1.17 (ch-tools),
+#                     >=1.13.0 (yandex-cloud/python-sdk), >=1.0.0 (ydb-python-sdk)
+#   pytest 9.1.1 - проверено; в репозиториях Яндекса: >=8.3.4 (yandex-cloud/python-sdk),
+#                     >=7.0.0,<8.0.0 (ydb-python-sdk), ==7.2.2 (datalens-backend)
+#   black  26.5.1 - нужен только для варианта B; в репозиториях Яндекса: ==25.11.0 (ydb-python-sdk),
+#                     ==26.5.1 (datalens-backend), >=24.10.0 (yandex-cloud/python-sdk)
+#   pytest-asyncio - нужен только для async-тестов. Последний выпуск на PyPI - 1.4.0 (2026-05-26);
+#                     ydb-python-sdk закрепляет ==0.21.0. Локально НЕ запускался (пакет не установлен,
+#                     реестр пакетов недоступен из среды сборки).
+# Версии black, ruff и flake8 внутри Аркадии не раскрыты (в yatool они заданы ресурсами Sandbox).
+#
+# Проверено локально (2026-10-09, Python 3.13.16) на тестовом пакете src/mypkg + tests/test_core.py:
+#   python -c "import tomllib; tomllib.load(open('pyproject.toml','rb'))"   -> файл разбирается
+#   ruff check --config pyproject.toml --show-settings src/mypkg/core.py   -> linter.line_length = 120,
+#        linter.unresolved_target_version = 3.10, formatter.quote_style = double, formatter.line_ending = lf
+#   ruff check .           -> All checks passed!
+#   ruff format --check .  -> 3 files already formatted
+#   mypy src tests         -> Success: no issues found in 3 source files (mypy должен видеть окружение
+#                             проекта с pytest; при отдельной установке mypy - ключ --python-executable)
+#   pytest                 -> 2 passed
+#   на файле с нарушениями срабатывают E401, E711, E722, F401, F403, F841, I001, N801, N802, UP004,
+#   B006, G004, G010, LOG015 и ошибка mypy no-untyped-def
+# Закомментированные блоки (варианты B и C, надстройки Django и FastAPI) проверены отдельно - 
+# результат указан в каждом блоке.
+# =============================================================================
+
+# ----------------------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 120            # Y-PY-002; дефолт Аркадии: ruff.toml и py_style/pyproject.toml в yandex/yatool
+target-version = "py310"     # Y-PY-046; нижняя граница >=3.10 - в 7 из 17 репозиториев выборки
+src = ["src", "tests"]
+extend-exclude = [           # Y-PY-008: сгенерированный и сторонний код не форматируют и не линтуют
+    "*_pb2.py", "*_pb2_grpc.py", "*_pb2.pyi",   # protobuf-стабы: ydb-python-sdk, yandex-cloud/python-sdk
+    "generated", "contrib", "vendor",           # каталоги, которые пропускает `ya style` (rules.py в yatool)
+]
+
+[tool.ruff.format]           # Y-PY-001
+quote-style = "double"       # Y-PY-004; YTsaurus Python Style Guide; поведение black по умолчанию в 5 SDK
+indent-style = "space"       # Y-PY-003
+line-ending = "lf"
+# Точная копия дефолта Аркадии (black: skip-string-normalization = true) - quote-style = "preserve".
+
+[tool.ruff.lint]
+select = [
+    # --- ядро: дефолт Аркадии (build/config/tests/ruff/ruff.toml), Y-PY-036 ---
+    "E4", "E7", "E9", "F", "W",
+    # --- расширение: группы из конфигов открытых репозиториев выборки (в комментарии - где включены) ---
+    "I",    # isort (Y-PY-011): ydb-mcp, langchain-ydb, tabred, YaFSDP, testsuite (через CLI)
+    "UP",   # pyupgrade (Y-PY-037, Y-PY-047): datalens-backend, tabm, tabred, YaFSDP (+ pre-commit pyupgrade в двух SDK)
+    "B",    # flake8-bugbear (Y-PY-038): datalens-backend, YaFSDP, yandex-ai-studio-sdk ([tool.flake8] select)
+    "N",    # pep8-naming (Y-PY-009): flake8.conf Аркадии (N8), datalens-backend, YaFSDP
+    "RUF",  # datalens-backend, tabm, tabred, YaFSDP; RUF100 - лишние noqa (Y-PY-035)
+    "G",    # flake8-logging-format (Y-PY-028, Y-PY-029): datalens-backend, YaFSDP
+    "LOG",  # flake8-logging (Y-PY-027): datalens-backend, YaFSDP
+    # --- по желанию (в конфигах выборки встречаются в одном-двух репозиториях, поэтому выключены) ---
+    # "PGH003", "PGH004",  # Y-PY-035: `# type: ignore` и `# noqa` без кода (аналог pygrep-хука в yandex-ai-studio-sdk)
+    # "T201",              # Y-PY-030: print в коде
+    # "TD002",             # Y-PY-024: TODO без автора
+    # "TID252",            # Y-PY-012: относительные импорты из родительских пакетов
+    # "S307",              # Y-PY-039: eval (группа S включена в datalens-backend)
+    # "C901",              # сложность; порог 15 - только yandex-cloud/python-sdk ([tool.ruff.lint.mccabe] max-complexity = 15)
+]
+ignore = [
+    "E501",    # длину строки держит форматтер (так же в ch-tools и datalens-backend)
+    "RUF001",  # кириллица в строках - намеренно (так же в datalens-backend)
+    "RUF002",  # кириллица в docstring; уберите эту и следующую строку, если Y-PY-022 нужно проверять строже
+    "RUF003",  # кириллица в комментариях
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]     # Y-PY-014: реэкспорт; ch-tools, django-ydb-backend, документация ya test
+
+[tool.ruff.lint.isort]
+known-first-party = ["mypkg"]   # <PROJECT>: замените на имя своего пакета
+
+# ----------------------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.10"          # ydb-python-sdk, yandex-taxi-testsuite, ch-tools, ydb-mcp
+check_untyped_defs = true        # Y-PY-032; python-sdk, testsuite, ch-tools, datalens-backend, tabm
+disallow_untyped_defs = true     # Y-PY-031; python-sdk, ch-tools, datalens-backend
+no_implicit_optional = true      # ydb-python-sdk
+warn_redundant_casts = true      # ydb-python-sdk, python-sdk, datalens-backend
+warn_unused_configs = true       # ydb-python-sdk, python-sdk, datalens-backend
+warn_unused_ignores = true       # Y-PY-035; datalens-backend (85 из 87 пакетов)
+show_error_codes = true          # ydb-python-sdk
+exclude = ["build/", "dist/", '_pb2(_grpc)?\.pyi?$']   # Y-PY-008
+
+# Y-PY-034: отсутствие стабов глушится точечно, по модулям (ydb-python-sdk, yandex-cloud/python-sdk).
+# Раскомментируйте и перечислите свои зависимости без стабов. Пока модули из списка не импортируются,
+# mypy пишет примечание «unused section(s)» - это следствие warn_unused_configs.
+# [[tool.mypy.overrides]]
+# module = ["grpc.*", "google.protobuf.*"]
+# ignore_missing_imports = true
+
+# ----------------------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]                    # Y-PY-040
+pythonpath = ["src"]                     # src-layout (см. [tool.ruff] src): без этой строки и без
+                                         # `pip install -e .` pytest не найдёт пакет из src/ (ModuleNotFoundError)
+addopts = ["-ra", "--strict-markers"]    # Y-PY-042; testsuite и интеграционные тесты YTsaurus (--strict-markers),
+                                         # datalens-backend (-ra)
+# asyncio_mode = "auto"                  # Y-PY-042; только вместе с плагином pytest-asyncio (ydb-python-sdk,
+#                                        # yandex-taxi-testsuite). Без плагина pytest 9.1.1 выдаёт
+#                                        # PytestConfigWarning: Unknown config option: asyncio_mode.
+
+# =============================================================================
+# Вариант B - буквальный дефолт Аркадии. Содержимое двух файлов yandex/yatool скопировано дословно
+# (Apache-2.0); при переносе в pyproject.toml у секций ruff появляется префикс tool.ruff.
+# Проверено локально: black 26.5.1 с этим конфигом выравнивает пробелы и пустые строки, но оставляет
+# одинарные кавычки (x = {'a': 1}); ruff 0.16.8 находит F401 и E711 на тестовом файле.
+#
+# (1) build/config/tests/py_style/pyproject.toml - форматтер black (`ya style`, макрос STYLE_PYTHON()):
+# [tool.black]
+# line-length = 120
+# skip-string-normalization = true
+#
+# (2) build/config/tests/ruff/ruff.toml - ruff (`ya style --ruff`, макрос STYLE_RUFF()):
+# [tool.ruff]
+# line-length = 120
+#
+# [tool.ruff.lint]
+# select = ["E4", "E7", "E9", "F", "W"]
+# ignore = []
+#
+# Чего в варианте B нет и чем он мягче профиля: нет сортировки импортов, pyupgrade, bugbear, проверок
+# логирования и проверки типов; кавычки не нормализуются.
+# Что воспроизвести нельзя: дефолтный flake8 Аркадии (select = E, W, F, C9, N8, PL; max-line-length = 200)
+# использует плагины с кодами PL* и FMT*, версии которых не опубликованы.
+#
+# -----------------------------------------------------------------------------
+# Вариант C - под YTsaurus Python Style Guide (100 символов, двойные кавычки, импорты «от частного
+# к общему», синтаксис Python 3.8+). Это наша реконструкция настроек под текст гайда: в репозитории
+# ytsaurus такого конфига нет. Проверено локально на ruff 0.16.8: `ruff check --select I --diff`
+# переставляет импорты в порядок «относительные -> yt.* -> сторонние -> стандартные».
+# [tool.ruff]
+# line-length = 100
+# target-version = "py38"
+#
+# [tool.ruff.format]
+# quote-style = "double"
+#
+# [tool.ruff.lint]
+# select = ["E4", "E7", "E9", "F", "W", "I"]
+#
+# [tool.ruff.lint.isort]
+# known-first-party = ["yt"]
+# section-order = ["future", "local-folder", "first-party", "third-party", "standard-library"]
+#
+# -----------------------------------------------------------------------------
+# Надстройки для фреймворков - НЕ ЯНДЕКС (публичных правил Яндекса для Django и FastAPI нет).
+# Подробности и источники: ../../docs/frameworks/django.md, ../../docs/frameworks/fastapi.md.
+# Проверено локально на ruff 0.16.8: `--show-settings` и срабатывание правил на тестовых файлах.
+#
+# Django - добавить в [tool.ruff.lint]:
+#   extend-select = ["DJ"]                       # flake8-django: DJ001, DJ003, DJ006, DJ007, DJ008, DJ012, DJ013
+# и в [tool.ruff.lint.per-file-ignores]:
+#   "**/migrations/*.py" = ["RUF012"]            # Y-DJ-002: списки dependencies/operations на уровне класса
+#   "**/test_*.py" = ["PT009", "PT027"]          # Y-DJ-001: нужно только если в select есть группа PT
+# Результат проверки: на тестовом приложении срабатывают DJ001, DJ007, DJ008, DJ012. N999 для файлов вида
+# migrations/0001_initial.py ruff 0.16.8 не выдаёт; в каталоге с другим именем выдаёт - тогда нужен
+# per-file-ignores, как в django-ydb-backend ("**/migrations_*/*.py" = ["N999"]). RUF012 срабатывает
+# на списки в class Meta (ordering = [...]): пишите кортежи либо отключите RUF012, как django-ydb-backend.
+#
+# FastAPI - добавить в [tool.ruff.lint]:
+#   extend-select = ["FAST"]                     # Y-FAPI-014: FAST001, FAST002, FAST003
+# и, пока зависимости не переведены на Annotated (Y-FAPI-005), секцию:
+#   [tool.ruff.lint.flake8-bugbear]
+#   extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+# Результат проверки: на тестовом роутере срабатывают FAST001, FAST002, FAST003; B008 срабатывает на
+# `db: Session = Depends(get_db)` и перестаёт после extend-immutable-calls или перехода на Annotated.
+# =============================================================================

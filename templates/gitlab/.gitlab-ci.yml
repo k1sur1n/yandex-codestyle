@@ -1,0 +1,159 @@
+# Профиль «Яндекс» · GitLab CI: линтеры и форматтеры в режиме проверки.
+# ПЕРЕНОС НА GITLAB - НЕ ЯНДЕКС. Ни один из 25 измеренных репозиториев Яндекса не использует GitLab CI
+# (research/yandex.md); это те же команды, что в templates/github/workflows/lint.yml, записанные ключевыми словами
+# GitLab CI. Скопируйте в корень проекта как .gitlab-ci.yml; конфиги профиля должны лежать в корне.
+# Данные актуальны на 2026-10-09. Правила: docs/enforcement.md.
+#
+# Версии инструментов те же, что в lint.yml: ruff 0.16.8, mypy 2.3.1, clang-format 18.1.3 (PyPI), clang-tidy 18
+#   (apt, ubuntu:24.04), Node.js 20, nbstripout 0.9.1, gitleaks 8.30.1 (релиз GitHub, sha256 ниже).
+# Образы - официальные образы Docker Hub (python, node, ubuntu); доступность тегов из среды сборки не проверялась
+#   (Docker Hub недоступен). Проверено локально: YAML разобран (PyYAML 6.0.3); команды ruff, clang-format,
+#   clang-tidy, gitleaks и shell-проверки запускались в среде сборки. Не запускалось: сам пайплайн (нужен раннер GitLab).
+#
+# Различия с GitHub Actions (подробнее - docs/git/repository.md, раздел о различиях платформ):
+#   - условия: вместо `if: hashFiles(...)` - `rules: exists:`; вместо `vars.X` - переменная CI/CD проекта;
+#   - заголовок MR - $CI_MERGE_REQUEST_TITLE, пайплайн MR - $CI_PIPELINE_SOURCE == "merge_request_event";
+#   - отчёт ruff в формате gitlab подключается как artifacts:reports:codequality (замечания видны в MR);
+#   - полная история для gitleaks - GIT_DEPTH: 0 (аналог fetch-depth: 0; так в примере GitLab CI из документации commitlint);
+#   - обязательность проверок - настройка «Pipelines must succeed» (Y-BR-007); merged results pipelines - Premium;
+#   - у GitLab Free нет обязательных одобрений и push rules; реестр моделей GitLab (Model Registry) встроен,
+#     у GitHub его нет (docs/ml/mlops.md).
+
+stages:
+  - lint
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+default:
+  interruptible: true                      # аналог concurrency: cancel-in-progress
+
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+
+# ------------------------------------------------------------------ Python: ruff + mypy (configs/python/pyproject.toml)
+# Y-PY-001 … 006, 008, 009, 011, 013, 014, 025, 027 … 029, 031, 032, 035 … 038, 046, 047; ноутбуки - Y-NB-012.
+# Нижняя поддерживаемая версия Python - 3.10 (Y-PY-046); тесты с матрицей 3.10-3.14 - отдельным пайплайном.
+python:
+  stage: lint
+  image: python:3.10
+  rules:
+    - exists: [pyproject.toml]
+  cache:
+    key: pip-$CI_COMMIT_REF_SLUG
+    paths: [.cache/pip]
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  before_script:
+    - python -m pip install "ruff==0.16.8" "mypy==2.3.1" "pytest==9.1.1"
+    - python -m pip install -e .            # mypy должен видеть зависимости проекта (Y-PY-034)
+  script:
+    - ruff format --check .                 # Y-PY-001 … 005
+    - ruff check --output-format=gitlab --output-file=gl-code-quality-report.json .   # отчёт Code Quality
+    - mypy src tests                        # Y-PY-031, Y-PY-032
+    - python -c "import <PROJECT>"          # Y-PY-016 - аналог import_test Аркадии; подставьте имя пакета
+  artifacts:
+    when: always
+    reports:
+      codequality: gl-code-quality-report.json
+
+# ------------------------------------------------------------------ C++: clang-format (configs/cpp/.clang-format)
+# Y-CPP-001 … 011, 017, 043; `#pragma once` - Y-CPP-035 (скрипт авторов профиля, не Яндекс).
+cpp-format:
+  stage: lint
+  image: python:3.12
+  rules:
+    - exists: ["**/*.cpp", "**/*.h"]
+  before_script:
+    - python -m pip install "clang-format==18.1.3"
+  script:
+    - |
+      git ls-files -z '*.h' '*.cpp' ':!contrib/**' ':!third_party/**' ':!vendor/**' \
+        | xargs -0 -r clang-format --dry-run --Werror --style=file
+    - |
+      git ls-files -z '*.h' ':!contrib/**' ':!third_party/**' ':!vendor/**' \
+        | xargs -0 -r awk 'FNR==1 && $0 != "#pragma once" {print FILENAME ": первая строка не #pragma once"; bad=1} END {exit bad}'
+
+# ------------------------------------------------------------------ C++: clang-tidy (configs/cpp/.clang-tidy)
+# Y-CPP-004, 013, 020 … 024, 026 … 028, 032, 033, 040, 047, 056 … 058; стандарт C++20 - Y-CPP-067.
+# Нужна настроенная сборка CMake. Включается переменной CI/CD проекта ENABLE_CLANG_TIDY=true
+# (Settings → CI/CD → Variables). -header-filter подгоните под свои каталоги.
+cpp-tidy:
+  stage: lint
+  image: ubuntu:24.04
+  rules:
+    - if: $ENABLE_CLANG_TIDY != "true"
+      when: never
+    - exists: [CMakeLists.txt]
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends clang-tidy-18 clang-tools-18 cmake ninja-build git ca-certificates
+  script:
+    - cmake -S . -B build -G Ninja -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    - run-clang-tidy-18 -p build -quiet -warnings-as-errors='*' -header-filter='.*/(src|include)/.*' 'src/.*'
+
+# ------------------------------------------------------------------ web: ESLint, Stylelint, Prettier, tsc (configs/web/*)
+# Y-TS-001 … 010, Y-REACT-001/005/008/009/011/012/013, Y-CSS-006 … 008/010/011/014. Команды - как
+# npm run lint и npm run typecheck в gravity-ui/uikit; --max-warnings=0 - как в page-constructor.
+web:
+  stage: lint
+  image: node:20
+  rules:
+    - exists: [package.json]
+  cache:
+    key:
+      files: [package-lock.json]
+    paths: [node_modules/]
+  before_script:
+    - npm ci
+  script:
+    - npx eslint . --max-warnings=0
+    - npx stylelint "src/**/*.scss" --allow-empty-input
+    - npx prettier --check "**/*.{md,json,yaml,yml}"
+    - npx tsc --noEmit
+
+# ------------------------------------------------------------------ заголовок MR (Y-GIT-001 … 006, Y-BR-006)
+# При squash-слиянии в историю попадает заголовок MR (шаблон %{title}). Скрипт scripts/commit-msg - копия файла
+# configs/git/commit-msg профиля (разбор - docs/git/commits.md, раздел «Shell-хук без Node.js»); ему нужны
+# только POSIX sh, GNU sed и grep.
+# Без CI: настройка «Title pattern» (Premium и Ultimate) - выражение в docs/git/commits.md.
+mr-title:
+  stage: lint
+  image: ubuntu:24.04
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - printf '%s\n' "$CI_MERGE_REQUEST_TITLE" > title.txt
+    - sh scripts/commit-msg title.txt
+
+# ------------------------------------------------------------------ ноутбуки без выводов (Y-NB-006; nbstripout - не Яндекс)
+notebooks:
+  stage: lint
+  image: python:3.12
+  rules:
+    - exists: ["notebooks/**/*.ipynb"]
+  before_script:
+    - python -m pip install "nbstripout==0.9.1"
+  script:
+    - git ls-files -z 'notebooks/**/*.ipynb' | xargs -0 -r nbstripout --verify
+
+# ------------------------------------------------------------------ секреты и большие файлы (Y-MLOPS-005, Y-MLOPS-002, Y-NB-008)
+# gitleaks - не Яндекс; сканируется вся история (GIT_DEPTH: 0). Большие файлы: порог 10 МБ, как в yandex-ai-studio-sdk.
+secrets:
+  stage: lint
+  image: ubuntu:24.04
+  variables:
+    GIT_DEPTH: 0
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends curl ca-certificates git
+    - curl -sSL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+    - echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
+    - tar -xzf gitleaks.tgz gitleaks && mv gitleaks /usr/local/bin/
+  script:
+    - gitleaks git --redact --verbose .
+    - |
+      git ls-files -z | xargs -0 -r stat -c '%s %n' \
+        | awk '$1 > 10485760 {print "слишком большой файл: " $2 " (" $1 " байт)"; bad=1} END {exit bad}'

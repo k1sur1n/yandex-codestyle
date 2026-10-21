@@ -1,0 +1,113 @@
+# Профиль «Яндекс» · .editorconfig для всего репозитория.
+# Данные актуальны на 2026-10-09. Правило профиля: docs/git/repository.md, Y-REPO-012.
+#
+# РЕКОНСТРУКЦИЯ. Единого .editorconfig Яндекс не публикует; файл есть в 5 из 25 измеренных репозиториев.
+# Основа - файл набора Gravity UI (gravity-ui/uikit, коммит a2f7a1d, MIT; одинаков во всех его репозиториях):
+#   [*] charset = utf-8, end_of_line = lf, indent_size = 4, indent_style = space, insert_final_newline = true,
+#       trim_trailing_whitespace = true; [{*.json,*.yaml,*.yml}] indent_size = 2; [*.md] trim_trailing_whitespace = false.
+# Секции по языкам согласованы с конфигами профиля (ruff, clang-format, Prettier) и с правилами документов:
+#   Python - Y-PY-003 (4 пробела), Y-PY-006 (хвостовые пробелы, финальный перевод строки), LF из [tool.ruff.format];
+#   C++ - Y-CPP-001 (4 пробела, без табов), Y-CPP-007; UTF-8 - редакция YDB, userver; LF - реконструкция;
+#   JS/TS - tabWidth 4 и LF из .prettierrc.json (@gravity-ui/prettier-config 1.1.1);
+#   Java - ydb-platform/ydb-java-sdk/.editorconfig (пробелы; indent_size в источнике не задан, умолчание IDEA - 4);
+#   Kotlin - стиль KOTLIN_OFFICIAL (yandex/yatagan); ключ ktlint_code_style - из документации ktlint (не Яндекс);
+#   Go - табуляция, требование gofmt (в источниках .editorconfig для Go нет);
+#   C# - catboost/dotnet/.editorconfig (отступ 4, LF) и ydb-dotnet-sdk/.editorconfig (методы-выражения);
+#   Rust - умолчания rustfmt (не Яндекс); PHP - ydb-platform/ydb-php-sdk/.editorconfig; Ruby - Ruby Style Guide (не Яндекс).
+#
+# Свойство max_line_length намеренно не задано: его нет в спецификации EditorConfig 0.17.2 (Y-REPO-012);
+# длину строки держат форматтеры - ruff 120 (Y-PY-002), Prettier 100 (Y-TS-001), clang-format не ограничивает
+# (ColumnLimit: 0; 110 - ориентир ревью, Y-CPP-018). Если редактор поддерживает это свойство,
+# его можно добавить в секции языков самостоятельно.
+#
+# Версия формата: EditorConfig 0.17.2 (https://spec.editorconfig.org/). Файл разобран локально парсером INI
+# (Python 3.13, configparser); редакторами не проверялся. Не запускалось: editorconfig-checker (не Яндекс)
+# недоступен из среды сборки.
+
+root = true
+
+# --- общее для всех файлов (как в gravity-ui/uikit) ---
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# --- Python (Y-PY-003, Y-PY-006; ruff format: indent-style = space, line-ending = lf) ---
+[*.{py,pyi}]
+indent_style = space
+indent_size = 4
+
+[pyproject.toml]
+indent_style = space
+indent_size = 4
+
+# --- C++ (Y-CPP-001, Y-CPP-007; clang-format: IndentWidth 4, TabWidth 4, UseTab Never) ---
+[*.{h,cpp,hpp,cc,c}]
+indent_style = space
+indent_size = 4
+tab_width = 4
+
+# --- JavaScript / TypeScript / SCSS (Prettier: tabWidth 4; Y-TS-001, Y-CSS-014) ---
+[*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,scss,css}]
+indent_style = space
+indent_size = 4
+
+# --- Java (ydb-java-sdk; Checkstyle LineLength 120 - Y-JAVA-001) ---
+[*.java]
+indent_style = space
+indent_size = 4
+
+# --- Kotlin (KOTLIN_OFFICIAL; ключ ktlint_code_style читает ktlint - не Яндекс) ---
+[*.{kt,kts}]
+indent_style = space
+indent_size = 4
+ktlint_code_style = intellij_idea
+
+# --- Go (gofmt: табуляция) ---
+[*.go]
+indent_style = tab
+
+# --- C# (catboost/dotnet, ydb-dotnet-sdk; Y-CS-005) ---
+[*.cs]
+indent_style = space
+indent_size = 4
+end_of_line = lf
+csharp_style_expression_bodied_methods = true:suggestion
+
+# --- Rust (умолчания rustfmt - не Яндекс) ---
+[*.rs]
+indent_style = space
+indent_size = 4
+
+# --- PHP (ydb-php-sdk) ---
+[*.php]
+indent_style = space
+indent_size = 4
+
+# --- Ruby (Ruby Style Guide - не Яндекс) ---
+[*.rb]
+indent_style = space
+indent_size = 2
+
+# --- данные и конфиги: 2 пробела, как в Gravity UI и в overrides .prettierrc.json ---
+[*.{json,yaml,yml}]
+indent_size = 2
+
+# --- Markdown: хвостовые пробелы значимы (перенос строки); 2 пробела - как у Prettier в overrides ---
+[*.md]
+indent_size = 2
+trim_trailing_whitespace = false
+
+# --- Makefile: синтаксис требует табуляцию ---
+[Makefile]
+indent_style = tab
+
+# --- конфиги C++ профиля: оригинал Аркадии записан с отступом 4 (.clang-format) и 2 (.clang-tidy) - не переформатировать ---
+[.clang-format]
+indent_size = 4
+
+[.clang-tidy]
+indent_size = 2

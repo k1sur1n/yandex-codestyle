@@ -1,0 +1,43 @@
+# Шаблон формы «запрос функции» - профиль Яндекса (реконструкция, см. docs/git/repository.md: Y-REPO-015).
+# Поля собраны по формам gravity-ui/uikit (2-feature-request.yml) и diplodoc-platform/cli (2-feature_request.yml).
+# Формат: GitHub issue forms (YAML); проверено разбором YAML локально, на GitHub не загружалось.
+# Метка из `labels` применяется, только если она уже создана в репозитории.
+name: Feature request
+description: Propose a new feature for <PROJECT>
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for your interest in the project and for taking the time to describe your idea!
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem will this feature solve?
+      description: Describe the problem and the use cases in as much detail as possible.
+      placeholder: I want [goal] so that [benefit].
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Suggested solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Alternative solutions or features you have considered.
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Anything else, including whether you intend to submit a pull request.
+  - type: checkboxes
+    id: validations
+    attributes:
+      label: Validations
+      description: Before submitting the issue, please make sure of the following.
+      options:
+        - label: I have checked that there is no existing issue that requests the same feature.
+          required: true
